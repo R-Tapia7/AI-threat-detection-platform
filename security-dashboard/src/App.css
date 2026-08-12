@@ -1,0 +1,155 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: #0f1419;
+  color: #e6e6e6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.app-header h1 {
+  font-size: 24px;
+  margin-bottom: 24px;
+}
+
+/* Metrics bar: 4 cards in a row using CSS Grid */
+.metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  background: #1a1f29;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  border-left: 4px solid #555;
+}
+
+.metric-card.critical {
+  border-left-color: #e74c3c;
+}
+
+.metric-card.suspicious {
+  border-left-color: #f39c12;
+}
+
+.metric-card.safe {
+  border-left-color: #2ecc71;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.metric-label {
+  font-size: 13px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* Main content: table + report panel side by side */
+.main-content {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+
+.logs-table-container {
+  background: #1a1f29;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.logs-table th {
+  text-align: left;
+  padding: 12px;
+  background: #222831;
+  font-size: 13px;
+  color: #999;
+  position: sticky;
+  top: 0;
+}
+
+.logs-table td {
+  padding: 10px 12px;
+  font-size: 14px;
+  border-bottom: 1px solid #222831;
+}
+
+.log-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.log-row:hover {
+  background: #222831;
+}
+
+.badge {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge.critical {
+  background: #e74c3c33;
+  color: #e74c3c;
+}
+
+.badge.suspicious {
+  background: #f39c1233;
+  color: #f39c12;
+}
+
+.badge.safe {
+  background: #2ecc7133;
+  color: #2ecc71;
+}
+
+/* Threat report panel */
+.threat-report {
+  background: #1a1f29;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.threat-report.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  min-height: 200px;
+}
+
+.ai-report-text {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  background: #0f1419;
+  padding: 12px;
+  border-radius: 6px;
+  max-height: 400px;
+  overflow-y: auto;
+}

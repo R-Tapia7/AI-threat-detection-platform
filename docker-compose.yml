@@ -1,0 +1,65 @@
+services:
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine # Official image, no Dockerfile needed
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: security_platform
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist data between restarts
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Python FastAPI analyzer
+  security-analyzer:
+    build: ./security-analyzer
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD}@postgres:5432/security_platform
+      OLLAMA_URL: http://host.docker.internal:11434/api/generate
+    depends_on:
+      postgres:
+        condition: service_healthy # Wait until postgres is actually ready
+    # Run migrations automatically before starting the server
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8001/analyze/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s # Give uvicorn time to start before checking
+
+  # Java Spring Boot log generator
+  log-generator:
+    build: ./log-generator
+    ports:
+      - "8080:8080"
+    depends_on:
+      security-analyzer:
+        condition: service_healthy # Start after Python is up
+    environment:
+      PYTHON_ANALYZER_URL: http://security-analyzer:8001
+
+  # React dashboard
+  security-dashboard:
+    build:
+      context: ./security-dashboard
+      args:
+        # Since the browser makes requests from outside Docker,
+        # it uses localhost:8001
+        VITE_API_URL: http://localhost:8001
+    ports:
+      - "3000:80" # nginx inside serves on 80, we expose on 3000
+
+volumes:
+  postgres_data: # Named volume managed by Docker

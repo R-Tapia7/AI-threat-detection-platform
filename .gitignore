@@ -1,0 +1,19 @@
+.env
+
+# Java
+target/
+.mvn/
+
+# Node / React
+node_modules/
+dist/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Editores y SO
+.vscode/
+.idea/
+.DS_Store
