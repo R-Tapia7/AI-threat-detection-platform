@@ -13,16 +13,17 @@ A hybrid microservices architecture for automated cybersecurity threat detection
 This platform simulates a corporate Security Operations Center (SOC) by generating realistic audit logs, detecting suspicious patterns, and producing natural-language threat reports using a local LLM — all in real time.
 
 ```
-[ Java / Spring Boot ]  ──→  [ Python / FastAPI ]  ──→  [ Llama 3.2 / Ollama ]
-  Generates audit logs        Analyzes with Pandas        AI threat reports
-  Simulates attacks           Rule-based detection
-                                      │
-                              [ PostgreSQL ]
-                              Persistent storage
-                                      │
-                              [ React Dashboard ]
-                              Real-time visualization
+[ Java / Spring Boot ] ──→ [ Python / FastAPI ] ──→ [ PostgreSQL ]
+  Generates audit logs       Pandas rule engine         Persistent storage
+  Simulates attacks          Responds immediately             ▲
+                                      │                       │ attaches AI report
+                                      ▼                       │
+                              [ In-memory queue ] ──→ [ AI worker thread ] ──→ [ Llama 3.2 / Ollama ]
+
+[ React Dashboard ] ←── polls /analyze/results every 3 s
 ```
+
+Detection and AI reporting are **decoupled**: the rule engine never waits for the LLM, so a slow or unavailable model cannot delay or lose threat detection.
 
 ---
 
@@ -48,9 +49,9 @@ This platform simulates a corporate Security Operations Center (SOC) by generati
   - Mass download: >5 file downloads by the same user in 5 minutes
   - Off-hours access: activity outside working hours (before 7am or after 10pm)
   - High error rate: >50% failure ratio system-wide in 5 minutes
-- **AI threat analysis** — suspicious events are sent to Llama 3.2 locally via Ollama, which generates structured incident reports including risk level, MITRE ATT&CK technique, and mitigation steps
+- **Asynchronous AI threat analysis** — suspicious events are placed in a queue and processed by a background worker that calls Llama 3.2 locally via Ollama, generating structured incident reports (risk level, MITRE ATT&CK technique, mitigation steps). Reports are attached to the stored event when ready. If Ollama is slow or down, detection keeps working and the event is marked as `AI report unavailable`
 - **Persistent storage** — all analyzed events stored in PostgreSQL with both event timestamp and processing timestamp, enabling latency analysis
-- **Live dashboard** — React frontend polls the API every 3 seconds showing metrics, a color-coded log table, and AI reports on demand
+- **Live dashboard** — React frontend polls the API every 3 seconds showing metrics and a color-coded log table. Selecting an event shows its AI report, or a "Generating AI report..." state until the worker finishes
 - **Attack simulation** — dedicated endpoint to trigger brute force scenarios for testing detection rules
 
 ---
@@ -73,8 +74,8 @@ This platform simulates a corporate Security Operations Center (SOC) by generati
 │   │   ├── db/                 # SQLAlchemy models and database connection
 │   │   ├── models/             # Pydantic schemas
 │   │   ├── routers/            # API endpoints
-│   │   ├── services/           # Analyzer, threat rules, AI reporter
-│   │   └── store.py            # In-memory cache (deque)
+│   │   ├── services/           # Analyzer, threat rules, AI reporter, background AI worker
+│   │   └── store.py            # In-memory cache and AI job queue
 │   ├── alembic/                # Database migrations
 │   └── Dockerfile
 │
@@ -196,6 +197,7 @@ To inspect the logs using pgAdmin or DBeaver while Docker is running, use these 
 - **Database:** `security_platform`
 - **Username:** `postgres`
 - **Password:** (The password you set in your `.env` file)
+
 ---
 
 ## API Reference
@@ -234,8 +236,9 @@ To trigger a brute force detection and see the AI in action, we use the built-in
 3. In the Request body, change the default `"string"` to a realistic IP address (e.g., `"45.33.32.156"`).
 4. Click **"Execute"**.
 
-This immediately generates a burst of failed login attempts from the target IP. Within seconds, the React dashboard will light up with CRITICAL alerts, and the Python analyzer will trigger the local Ollama instance to generate a full incident report.
+This immediately generates a burst of failed login attempts from the target IP. Within seconds, the React dashboard will light up with CRITICAL alerts. The AI incident reports follow shortly after, as the background worker generates them with the local Ollama instance and attaches them to each event.
 
+---
 
 ## Architecture Decisions
 
@@ -246,7 +249,18 @@ In addition, Pandas rolling windows use the same logic as statistical processing
 
 **Why a local LLM instead of a cloud API?** Ollama with Llama 3.2 runs entirely on your machine — no API costs, no data leaving your network, no rate limits. This mirrors the privacy requirements of a real corporate SOC where security logs cannot be sent to third-party services.
 
+**Why is the AI decoupled from detection?** LLM inference on CPU takes tens of seconds and competes for resources with the rest of the system. If detection waited for it, a saturated or crashed model would block the Java generator, delay the dashboard and lose events. Instead, the rule engine stores every event immediately and enqueues suspicious ones. A single background worker consumes the queue, calls the model and updates each stored event with its report. Alerts are therefore near-instant, while reports are enrichment that arrives later, which is how real SOC pipelines treat detection versus enrichment. Events are enqueued only after they have been saved, so the worker can always find the record it needs to update.
+
 **Why polling instead of WebSockets?** For a dashboard that updates every 3 seconds, polling is simpler, more reliable, and sufficient. WebSockets would add complexity without a meaningful user experience improvement at this update frequency.
+
+---
+
+## Known Limitations & Future Work
+
+- **Single AI worker:** reports are generated one at a time. This is deliberate, since parallel LLM calls on CPU only worsen saturation, but under heavy suspicious traffic the report queue grows and reports are delayed. The queue is bounded (100 items); beyond that, reports are skipped while detection continues.
+- **In-memory queue:** pending reports are lost if the analyzer restarts (the events themselves are already persisted). A production deployment would use a broker such as Redis, RabbitMQ or Kafka.
+- **In-memory history window:** rolling detection rules use the last 500 events held in memory. A larger deployment would query a time-series store instead.
+- **Application-layer telemetry only:** rules cover audit logs, not network traffic (ports, destinations, protocols). Network-level detection would require additional data sources and fields.
 
 ---
 

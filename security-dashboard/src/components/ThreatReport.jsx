@@ -20,13 +20,13 @@ function ThreatReport({ log }) {
             {/* Conditional rendering: only show the AI report section
           if ai_report actually has a value. The && operator means
           "render the right side only if the left side is truthy". */}
-            {log.ai_report && (
+            {log.ai_report ? (
                 <div className="ai-report">
                     <h4>AI Analysis</h4>
-                    {/* white-space: pre-wrap in CSS will respect the newlines
-              already in the text, so we don't need to parse markdown. */}
                     <pre className="ai-report-text">{log.ai_report}</pre>
                 </div>
+            ) : (
+                log.rule_triggered && <p>Generating AI report...</p>
             )}
         </div>
     );

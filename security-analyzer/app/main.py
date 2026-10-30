@@ -1,11 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import analyze
+from app.services.ai_worker import start_worker
+from contextlib import asynccontextmanager
+
+
+# lifespan runs code when the server starts (before yield)
+# and when it stops (after yield). It's the right place to start
+# background resources like the worker.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_worker()
+    yield
+
 
 app = FastAPI(
-    title="Security Analizer",
+    title="Security Analyzer",
     description="Security log analysis microservice",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

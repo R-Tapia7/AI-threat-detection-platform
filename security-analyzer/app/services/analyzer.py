@@ -1,11 +1,12 @@
 import pandas as pd
 from app.models.log_models import SecurityLog, AnalysisResult
 from app.services.threat_rules import *
-from app.services.ai_reporter import get_ai_report
+
 import logging
-from app.store import results_store, logs_history
 from app.db.db_models import save_result_to_db
 from sqlalchemy.orm import Session
+from queue import Full
+from app.store import results_store, logs_history, ai_queue
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ def analyze_logs(logs : list[SecurityLog], db: Session) -> list[AnalysisResult]:
     # Add the new logs to our sliding history window
     logs_history.extend(logs)
 
-    df = pd.DataFrame([log.model_dump() for log in logs])
+    df = pd.DataFrame([log.model_dump() for log in logs_history])
     # Ensure the timestamp column is treated as real dates/times for mathematical operations
     df["timestamp"] = pd.to_datetime(df["timestamp"])
 
@@ -48,16 +49,6 @@ def analyze_logs(logs : list[SecurityLog], db: Session) -> list[AnalysisResult]:
                 threat_level = "SUSPICIOUS"
                 rule_triggered = "HIGH_ERROR_RATE"
 
-        ai_report = None
-        if threat_level != "SAFE" and rule_triggered:
-            # Synchronous call, python waits for Ollama before continuing.
-            # Java will wait too, but that's fine for now
-            ai_report = get_ai_report(log, rule_triggered)
-            logger.info(
-                "\n%s\nTHREAT REPORT — %s | %s\n%s\n%s\n%s",
-                "="*50, log.ip, rule_triggered, "="*50, ai_report, "="*50
-            )
-
         result = AnalysisResult(
             logId=log.logId,
             timestamp=log.timestamp,
@@ -67,13 +58,21 @@ def analyze_logs(logs : list[SecurityLog], db: Session) -> list[AnalysisResult]:
             status=log.status,
             threat_level=threat_level,
             rule_triggered=rule_triggered,
-            ai_report=ai_report
+            ai_report=None      # filled in later by the worker
         )
 
         results.append(result)
         results_store.append(result)
         # Write to PostgreSQL immediately so it's safe even if Python crashes next
         save_result_to_db(db, result)
+
+        # Enqueue only after the result exists in memory and in PostgreSQL,
+        # so the worker is guaranteed to find it when it finishes.
+        if threat_level != "SAFE" and rule_triggered:
+            try:
+                ai_queue.put_nowait((log, rule_triggered))
+            except Full:
+                logger.warning("AI queue full, skipping report for %s", log.logId)
 
     return results
 

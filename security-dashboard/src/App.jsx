@@ -6,14 +6,11 @@ import ThreatReport from "./components/ThreatReport";
 import "./App.css";
 
 function App() {
-  // useState creates a piece of state — a value that React tracks.
-  // When it changes, React automatically re-renders the component.
-  // 'results' is the current value, 'setResults' is the function to update it.
   const [results, setResults] = useState([]);
+  
+  const [selectedId, setSelectedId] = useState(null);
 
-  // 'selectedLog' tracks which row the user clicked in the table,
-  // so ThreatReport knows what to display.
-  const [selectedLog, setSelectedLog] = useState(null);
+  const selectedLog = results.find((r) => r.logId === selectedId) || null;
 
   // useEffect runs side effects — things that happen outside
   // the normal render flow, like fetching data or setting timers.
@@ -50,7 +47,7 @@ function App() {
       <MetricsBar results={results} />
 
       <div className="main-content">
-        <LogsTable results={results} onSelectLog={setSelectedLog} />
+        <LogsTable results={results} onSelectLog={(log) => setSelectedId(log.logId)} />
         <ThreatReport log={selectedLog} />
       </div>
     </div>
